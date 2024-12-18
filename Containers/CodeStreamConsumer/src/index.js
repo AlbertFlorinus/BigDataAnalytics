@@ -13,6 +13,8 @@ const FileStorage = require('./FileStorage');
 // Express and Formidable stuff to receice a file for further processing
 // --------------------
 const form = formidable({multiples:false});
+const fileTimingStatistics = []; // Store up to 1000 files for trends
+const MAX_STATS = 1000; // Max files to track for trends
 
 app.post('/', fileReceiver );
 function fileReceiver(req, res, next) {
@@ -35,6 +37,63 @@ function fileReceiver(req, res, next) {
             });
     });
 }
+
+app.get('/timers', (req, res) => {
+    // Compute statistics
+    const totalFiles = fileTimingStatistics.length;
+    if (totalFiles === 0) return res.send('<HTML><BODY><H1>No data available</H1></BODY></HTML>');
+
+    const avgTotalTime = fileTimingStatistics.reduce((sum, stat) => sum + stat.totalTime, 0) / totalFiles;
+    const avgNormTime = fileTimingStatistics.reduce((sum, stat) => sum + stat.normalizedTime, 0) / totalFiles;
+
+    const last100 = fileTimingStatistics.slice(-100);
+    const avgLast100TotalTime = last100.reduce((sum, stat) => sum + stat.totalTime, 0) / last100.length;
+    const avgLast100NormTime = last100.reduce((sum, stat) => sum + stat.normalizedTime, 0) / last100.length;
+
+    // Generate HTML with timing stats and trend graph
+    let page = '<HTML><HEAD><TITLE>Timing Statistics</TITLE></HEAD>\n';
+    page += '<BODY><H1>Timing Statistics</H1>\n';
+
+    // Averages
+    page += `<p>Total files processed: ${totalFiles}</p>\n`;
+    page += `<p>Average Total Time (All): ${avgTotalTime.toFixed(2)} µs</p>\n`;
+    page += `<p>Average Normalized Time (All): ${avgNormTime.toFixed(2)} µs/line</p>\n`;
+    page += `<p>Average Total Time (Last 100): ${avgLast100TotalTime.toFixed(2)} µs</p>\n`;
+    page += `<p>Average Normalized Time (Last 100): ${avgLast100NormTime.toFixed(2)} µs/line</p>\n`;
+
+    // Data for Graph
+    const graphData = fileTimingStatistics.map((stat, index) => ({
+        x: index + 1,
+        totalTime: stat.totalTime,
+        normalizedTime: stat.normalizedTime,
+    }));
+
+    page += '<H2>Timing Trends (Last 1000 Files)</H2>\n';
+    page += '<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>\n';
+    page += '<div id="graph"></div>\n';
+    page += '<script>\n';
+    page += 'var data = [\n';
+    page += '  {\n';
+    page += '    x: ' + JSON.stringify(graphData.map(d => d.x)) + ',\n';
+    page += '    y: ' + JSON.stringify(graphData.map(d => d.totalTime)) + ',\n';
+    page += '    type: "scatter",\n';
+    page += '    name: "Total Time (µs)"\n';
+    page += '  },\n';
+    page += '  {\n';
+    page += '    x: ' + JSON.stringify(graphData.map(d => d.x)) + ',\n';
+    page += '    y: ' + JSON.stringify(graphData.map(d => d.normalizedTime)) + ',\n';
+    page += '    type: "scatter",\n';
+    page += '    name: "Normalized Time (µs/line)"\n';
+    page += '  }\n';
+    page += '];\n';
+    page += 'Plotly.newPlot("graph", data);\n';
+    page += '</script>\n';
+
+    page += '</BODY></HTML>';
+    res.send(page);
+});
+
+
 
 
 app.get('/', viewClones );
@@ -141,28 +200,41 @@ function maybePrintStatistics(file, cloneDetector, cloneStore) {
 function processFile(filename, contents) {
     let cd = new CloneDetector();
     let cloneStore = CloneStorage.getInstance();
+    let numberOfLines = contents.split('\n').length;
 
-    return Promise.resolve({name: filename, contents: contents} )
-        //.then( PASS( (file) => console.log('Processing file:', file.name) ))
-        .then( (file) => Timer.startTimer(file, 'total') )
-        .then( (file) => cd.preprocess(file) )
-        .then( (file) => cd.transform(file) )
+    return Promise.resolve({ name: filename, contents: contents })
+        .then(file => Timer.startTimer(file, 'total'))
+        .then(file => cd.preprocess(file))
+        .then(file => cd.transform(file))
+        .then(file => Timer.startTimer(file, 'match'))
+        .then(file => cd.matchDetect(file))
+        .then(file => cloneStore.storeClones(file))
+        .then(file => Timer.endTimer(file, 'match'))
+        .then(file => cd.storeFile(file))
+        .then(file => Timer.endTimer(file, 'total'))
+        .then(file => {
+            // Collect timing stats
+            const timers = Timer.getTimers(file);
+            fileTimingStatistics.push({
+                filename: file.name,
+                totalTime: Number(timers.total) / 1000, // Convert ns to µs
+                matchTime: Number(timers.match) / 1000,
+                numberOfLines: numberOfLines,
+                normalizedTime: (Number(timers.total) / 1000) / numberOfLines,
+            });
 
-        .then( (file) => Timer.startTimer(file, 'match') )
-        .then( (file) => cd.matchDetect(file) )
-        .then( (file) => cloneStore.storeClones(file) )
-        .then( (file) => Timer.endTimer(file, 'match') )
+            // Keep stats limited to the most recent 1000 files
+            if (fileTimingStatistics.length > MAX_STATS) {
+                fileTimingStatistics.shift();
+            }
+            return file;
+        })
+        .then(PASS(file => lastFile = file))
+        .then(PASS(file => maybePrintStatistics(file, cd, cloneStore)))
+        .catch(console.log);
+}
 
-        .then( (file) => cd.storeFile(file) )
-        .then( (file) => Timer.endTimer(file, 'total') )
-        .then( PASS( (file) => lastFile = file ))
-        .then( PASS( (file) => maybePrintStatistics(file, cd, cloneStore) ))
-    // TODO Store the timers from every file (or every 10th file), create a new landing page /timers
-    // and display more in depth statistics there. Examples include:
-    // average times per file, average times per last 100 files, last 1000 files.
-    // Perhaps throw in a graph over all files.
-        .catch( console.log );
-};
+
 
 /*
 1. Preprocessing: Remove uninteresting code, determine source and comparison units/granularities
