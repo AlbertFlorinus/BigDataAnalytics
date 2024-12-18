@@ -93,9 +93,6 @@ app.get('/timers', (req, res) => {
     res.send(page);
 });
 
-
-
-
 app.get('/', viewClones );
 
 const server = app.listen(PORT, () => { console.log('Listening for files on port', PORT); });
