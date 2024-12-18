@@ -16,12 +16,26 @@ const form = formidable({multiples:false});
 
 app.post('/', fileReceiver );
 function fileReceiver(req, res, next) {
+    //ändrad från orginalet, tidigare kraschade den IBLAND av missing filepath
     form.parse(req, (err, fields, files) => {
+        if (err) {
+            console.error('Error parsing form:', err);
+            return res.status(400).json({ error: 'Invalid form submission. Please try again.' });
+        }
+        if (!files || !files.data || !files.data.filepath) {
+            console.error('Filepath is missing in the uploaded files.');
+            return res.status(400).json({ error: 'No valid file uploaded. Please try again.' });
+        }
         fs.readFile(files.data.filepath, { encoding: 'utf8' })
-            .then( data => { return processFile(fields.name, data); });
+            .then(data => processFile(fields.name, data))
+            .then(() => res.status(200).end('File processed successfully.'))
+            .catch(error => {
+                console.error('Error processing file:', error);
+                res.status(500).json({ error: 'Error processing the uploaded file.' });
+            });
     });
-    return res.end('');
 }
+
 
 app.get('/', viewClones );
 

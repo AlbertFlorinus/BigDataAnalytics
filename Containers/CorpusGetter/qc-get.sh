@@ -3,7 +3,9 @@
 getCorpus() {
   echo "Getting QualitasCorpus..."
   cd /QualitasCorpus
+  #wget http://www.cs.auckland.ac.nz/~ewan/download/corpus/QualitasCorpus-20130901r-pt1.tar
   wget ftp://custsrv1.bth.se/FTP/QualitasCorpus/QualitasCorpus-20130901r-pt1.tar
+  #wget http://www.cs.auckland.ac.nz/~ewan/download/corpus/QualitasCorpus-20130901r-pt2.tar
   wget ftp://custsrv1.bth.se/FTP/QualitasCorpus/QualitasCorpus-20130901r-pt2.tar
   tar xf QualitasCorpus-20130901r-pt1.tar
   tar xf QualitasCorpus-20130901r-pt2.tar
