@@ -8,8 +8,14 @@
 (def source-dir (or (System/getenv "SOURCEDIR") "/tmp"))
 (def source-type #".*\.java")
 
+;;(defn ts-println [& args]
+;;  (println (.toString (java.time.LocalDateTime/now)) args))
+
 (defn ts-println [& args]
-  (println (.toString (java.time.LocalDateTime/now)) args))
+  (let [timestamp (.toString (java.time.LocalDateTime/now))
+        message (apply str args)]
+    (println timestamp message) ;; Print the message to the console
+    (storage/addUpdate! timestamp message))) ;; Store the message in the database
 
 (defn maybe-clear-db [args]
   (when (some #{"CLEAR"} (map string/upper-case args))
