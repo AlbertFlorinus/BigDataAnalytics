@@ -1,10 +1,11 @@
-# Docker Compose for All-At-Once Code Clone Detection
-
 version: "3.8"
+
 services:
   clone-detector:
+    depends_on:
+      - dbstorage
     image: cljdetector
-    command: clear 
+    command: clear
     ports:
       - 8080:3000
     volumes:
@@ -16,6 +17,8 @@ services:
       SOURCEDIReclipse: "/QualitasCorpus/QualitasCorpus-20130901e/Systems/lucene"
       SOURCEDIR: "/QualitasCorpus"
       CHUNKSIZE: 20
+    networks:
+      - app-network
 
   dbstorage:
     image: mongo
@@ -23,15 +26,36 @@ services:
     command: --quiet --syslog
     ports:
       - 27017:27017
-    expose:
-      - "27017"
     volumes:
       - dbstorage:/data/db
       - dbconfig:/data/configdb
-    
+    networks:
+      - app-network
+
+  monitor:
+    depends_on:
+      - dbstorage
+      - clone-detector
+    image: monitortool
+    ports:
+      - 4000:3000
+    environment:
+      MONGO_HOST: dbstorage
+      MONGO_PORT: 27017
+      MONGO_DB: cloneDetector
+    command: ["sh", "-c", "sleep 3 && python /MonitorTool/main.py"]
+    networks:
+      - app-network
+
+
+
 volumes:
   dbstorage:
   dbconfig:
   qc-volume:
     external: true
-    
+
+networks:
+  app-network:
+    driver: bridge
+

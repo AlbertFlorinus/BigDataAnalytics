@@ -12,5 +12,8 @@ codeStreamConsumer:
 cljDetector:
 	cd cljdetector && docker build -t cljdetector .
 
+MonitorTool:
+	cd MonitorTool && docker build -t monitortool .
+	
 clean:
 	docker rmi --force corpusgetter csgenerator

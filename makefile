@@ -23,6 +23,9 @@ mongodb:
 mongosh:
 	@docker exec -it bigdataanalytics-dbstorage-1 mongosh
 
+MonitorTool:
+	@docker compose -f all-at-once.yaml up monitor
+
 doc:
 	@emacs --batch --file ./Documentation/Big-Data-Analytics.org --eval "(org-texinfo-export-to-info)"
 	@texi2pdf ./Documentation/Big-Data-Analytics.texi --command=@afourpaper -q -c -o ./Documentation/Big-Data-Analytics.pdf
